@@ -2,6 +2,8 @@ import pyspark
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+from pyspark.sql.functions import window, col, from_json, count
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 
 dotenv_path = Path("/opt/app/.env")
@@ -40,12 +42,35 @@ stream_df = (
 #     .awaitTermination()
 # )
 
-(
-    stream_df
-    .groupBy('value')
-    .count()
-    .writeStream.format("console")
-    .outputMode("complete")
-    .start()
-    .awaitTermination()
+# (
+#     stream_df
+#     .groupBy('value')
+#     .count()
+#     .writeStream.format("console")
+#     .outputMode("complete")
+#     .start()
+#     .awaitTermination()
+# )
+
+# Define the schema for your JSON data
+json_schema = StructType([
+    StructField("order_id", StringType(), True),
+    StructField("customer_id", IntegerType(), True),
+    StructField("furniture", StringType(), True),
+    StructField("color", StringType(), True),
+    StructField("price", IntegerType(), True),
+    StructField("ts", IntegerType(), True)
+])
+
+# Deserialize the JSON data
+parsed_stream = stream_df.selectExpr("CAST(value AS STRING)").select(
+    from_json("value", json_schema).alias("data")
 )
+
+# You can now work with the parsed data and apply your aggregation
+aggregated_data = parsed_stream.parsed_stream.agg(count("*").alias("total_purchase"))
+
+# Write the result to a sink (e.g., console or another data store)
+aggregated_data.writeStream.format("console").outputMode("complete").start().awaitTermination()
+
+
